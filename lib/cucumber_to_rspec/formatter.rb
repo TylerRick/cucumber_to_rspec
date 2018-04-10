@@ -11,24 +11,32 @@ module Cucumber
       MethodSource.source_helper(loc)
     end
 
-    def to_rspec
-      var_assign_from_args(source) + "\n" +
-      source.lines[1..-2].join().indent(-2)
+    def to_rspec(table)
+      var_assign_from_args(source, table) + "\n" +
+      source.lines[1..-2].join().
+        gsub(/\.rows_hash/, '').
+        indent(-2)
     end
 
     # Prints `local = value` for each arg in the step def
-    def var_assign_from_args(source)
+    def var_assign_from_args(source, table)
       matches = source.match(/do \|(.*)\|/)
       return '' unless matches
       matches[1].scan(/\w+/).map.with_index { |var_name, i|
         arg = step_arguments[i]
-        # TODO: Handle tables
-        type = arg.instance_variable_get(:@parameter_type).type rescue (STDOUT.p $!; nil)
-        value = args[i]
+        if arg.nil? && table
+          type = 'table'
+          value = table
+        else
+          type = arg.instance_variable_get(:@parameter_type).type rescue (STDOUT.puts $!.inspect; nil)
+          value = args[i]
+        end
         value =
           case type
           when 'int', 'float'
             value
+          when 'table'
+            value.rows_hash.pretty_inspect.strip
           else
             value.inspect
           end
@@ -44,22 +52,12 @@ module CucumberToRspec
       # Override Cucumber::Formatter::Console
 
       def format_step(keyword, step_match, status, source_indent)
-        lines = []
-
         comment = if source_indent
                     "# #{step_match.location}".indent(source_indent)
                   else
                     ''
                   end
-
-
-        lines << "# #{keyword} #{step_match.format_args} #{comment}"
-
-        if step_match.respond_to?(:to_rspec)
-          lines << step_match.to_rspec
-        end
-
-        lines.join("\n")
+        "# #{keyword} #{step_match.format_args} #{comment}"
       end
 
       # Override/extend Cucumber::Formatter::Pretty
@@ -131,19 +129,37 @@ module CucumberToRspec
 
       #def step_name(keyword, step_match, status, source_indent, _background, _file_colon_line)
 
+      #def after_step_result(keyword, step_match, _multiline_arg, status, _exception, _source_indent, _background, _file_colon_line)
+
+      def after_step(_step)
+        step_match = _step.step_match
+        if step_match.respond_to?(:to_rspec)
+          @io.puts step_match.to_rspec(@table).indent(@scenario_indent + 2)
+        end
+        @table = nil
+      end
+
+      # TODO:
       #def doc_string(string)
 
-      #def before_multiline_arg(multiline_arg)
+      def before_multiline_arg(multiline_arg)
+        @table = multiline_arg
+      end
 
-      #def after_multiline_arg(_multiline_arg)
+      def after_multiline_arg(_multiline_arg)
+      end
 
-      #def before_table_row(_table_row)
+      def before_table_row(_table_row)
+      end
 
-      #def after_table_row(table_row)
+      def after_table_row(table_row)
+      end
 
-      #def after_table_cell(_cell)
+      def after_table_cell(_cell)
+      end
 
-      #def table_cell_value(value, status)
+      def table_cell_value(value, status)
+      end
 
       def after_test_step(test_step, result)
         #@io.puts "#{test_step.to_s}   #{test_step.location.to_s}"
