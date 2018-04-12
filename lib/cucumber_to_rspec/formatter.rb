@@ -36,7 +36,7 @@ module Cucumber
           when 'int', 'float'
             value
           when 'table'
-            value.rows_hash.pretty_inspect.strip
+            value.rows_hash.pretty_inspect.strip rescue (STDOUT.puts $!.inspect; nil)
           else
             value.inspect
           end
